@@ -49,7 +49,6 @@
             color: #9fb6ad;
             font-size: 13px;
         }
-        /* Lobby list */
         .table-card {
             padding: 10px;
             border-radius: 10px;
@@ -59,7 +58,6 @@
             justify-content: space-between;
             align-items: center;
         }
-        /* Table view */
         .table-area {
             display: flex;
             flex-direction: column;
@@ -130,7 +128,6 @@
             color: #072017;
             font-weight: 800;
         }
-        /* controls */
         .controls {
             display: flex;
             gap: 8px;
@@ -143,7 +140,6 @@
             border: none;
             width: 120px;
         }
-        /* chat */
         .chat {
             max-height: 200px;
             overflow: auto;
@@ -232,7 +228,6 @@
     </div>
 
     <script>
-        // Simple local multiplayer using localStorage sync.
         const STORAGE_KEY = 'poker_tables_v1';
         let playerId = 'p_' + Math.random().toString(36).slice(2, 9);
         let displayName = localStorage.getItem('poker_name') || 'You';
@@ -265,6 +260,7 @@
             try {
                 return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
             } catch (e) {
+                console.error("Error reading tables from localStorage:", e);
                 return [];
             }
         };
@@ -344,7 +340,6 @@
             const table = tables.find(t => t.id === id);
             if (!table) return alert('Table not found');
 
-            // Find existing seat where this player already is
             let seatIndex = table.seats.findIndex(s => s && s.id === playerId);
             if (seatIndex === -1) {
                 seatIndex = table.seats.findIndex(s => !s);
@@ -379,10 +374,12 @@
             tableSub.innerText = table.mode;
             potEl.innerText = table.pot;
 
-            // Seats
+            // Clear previous seats and players
             seatsEl.innerHTML = '';
             playersList.innerHTML = '';
             communityEl.innerHTML = '';
+
+            // Render seats
             table.seats.forEach((seat, index) => {
                 const div = document.createElement('div');
                 div.className = 'seat';
@@ -567,4 +564,3 @@
     </script>
 </body>
 </html>
-
