@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Erth-Style Poker Demo — Multiplayer (Local)</title>
+  <style>
+    :root{--bg:#0b0f13;--panel:rgba(255,255,255,0.04);--accent:#2fe6a8}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;overflow-x:hidden;background:linear-gradient(180deg,#051018,#07121a);font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#e8f6ef}
+    .app{display:grid;grid-template-columns:300px 1fr 320px;gap:12px;padding:14px;min-height:100vh}
+    .panel{background:var(--panel);padding:12px;border-radius:12px;backdrop-filter:blur(6px)}
+    h3{margin:8px 0}
+    button{background:linear-gradient(135deg,#4e9eff,#1e6fff);border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer}
+    .small{color:#9fb6ad;font-size:13px}
+
+    /* Lobby list */
+    .table-card{padding:10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+
+    /* Table view */
+    .table-area{display:flex;flex-direction:column;min-height:100%;height:auto;}
+    .table-stage{flex:1;min-height:420px;display:flex;align-items:center;justify-content:center;position:relative}
+    .felt{width:760px;height:420px;border-radius:220px;background:radial-gradient(circle at 50% 25%,#0b6b2e,#06401f);box-shadow:0 16px 50px rgba(0,0,0,0.6);position:relative}
+    .community{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);display:flex;gap:10px}
+    .card-ui{width:64px;height:92px;border-radius:8px;background:white;color:#000;display:flex;align-items:center;justify-content:center;font-weight:700}
+
+    .seats{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:100%;height:100%}
+    .seat{position:absolute;width:120px;text-align:center}
+    .seat .chips{margin-top:6px;font-weight:700}
+    .seat .chip-stack{width:54px;height:28px;background:linear-gradient(90deg,#f6c84c,#e69b2b);border-radius:14px;margin:6px auto;display:flex;align-items:center;justify-content:center;color:#072017;font-weight:800}
+
+    /* controls */
+    .controls{display:flex;gap:8px;align-items:center;margin-top:10px}
+    input[type=number]{padding:8px;border-radius:8px;border:none;width:120px}
+
+    /* chat */
+    .chat{max-height:200px;overflow:auto;background:rgba(0,0,0,0.12);padding:8px;border-radius:8px}
+
+    @media(max-width:1100px){.app{grid-template-columns:1fr}} 
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <h3>Lobby</h3>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="newTblName" placeholder="Table name" style="flex:1;padding:8px;border-radius:8px;border:none" />
+        <button id="createTbl">Create</button>
+      </div>
+      <div id="lobbyList"></div>
+      <hr />
+      <div class="small">Tip: Open this page in multiple tabs to simulate real multiplayer — tables sync locally via <code>localStorage</code>.</div>
+    </aside>
+
+    <main class="panel table-area">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h3 id="tableTitle">No table selected</h3><div class="small" id="tableSub">Join or create a table</div></div>
+        <div><div class="small">Pot: <strong id="pot">0</strong></div></div>
+      </div>
+
+      <div class="table-stage">
+        <div class="felt" id="felt">
+          <div class="community" id="community"></div>
+          <div class="seats" id="seats"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:10px;align-items:flex-start">
+        <div style="flex:1">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="betAmount" min="1" step="1" value="50" />
+            <button id="btnBet">Bet / Call</button>
+            <button id="btnCheck">Check</button>
+            <button id="btnFold">Fold</button>
+            <button id="btnDeal">Deal</button>
+          </div>
+
+          <div class="panel" style="margin-top:10px">
+            <h4>Chat</h4>
+            <div class="chat" id="chat"></div>
+            <input id="chatInput" placeholder="Message (Enter to send)" style="margin-top:8px;padding:8px;border-radius:8px;border:none;width:100%" />
+          </div>
+        </div>
+
+        <aside style="width:320px">
+          <div class="panel">
+            <h4>Your Profile</h4>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div style="width:56px;height:56px;border-radius:999px;background:#fff;color:#072017;display:flex;align-items:center;justify-content:center;font-weight:800" id="avatar">Y</div>
+              <div>
+                <div><strong id="playerName">You</strong></div>
+                <div class="small">Chips: <strong id="yourChips">1000</strong></div>
+                <div class="small">Seat: <span id="yourSeat">—</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:10px">
+            <h4>Table Players</h4>
+            <div id="playersList"></div>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <aside class="panel">
+      <h3>Tables</h3>
+      <div id="tablesList"></div>
+      <hr />
+      <div class="small">Tables are stored in localStorage. Open multiple tabs to see live updates.</div>
+    </aside>
+  </div>
+
+<script>
+// Simple local multiplayer using localStorage sync. This is NOT a server — but multiple tabs/windows on the same machine and origin will sync.
+// Data model: tables keyed at 'poker_tables' in localStorage. Each table has seats array, pot, community, deck, stage.
+
+const STORAGE_KEY='poker_tables_v1';
+let playerId = 'p_' + Math.random().toString(36).slice(2,9);
+let displayName = localStorage.getItem('poker_name') || ('You');
+let myChips = parseInt(localStorage.getItem('poker_chips')||'1000');
+let currentTableId = null;
+const seatsPerTable = 6;
+
+// UI refs
+const lobbyList = document.getElementById('lobbyList');
+const tablesList = document.getElementById('tablesList');
+const tableTitle = document.getElementById('tableTitle');
+const tableSub = document.getElementById('tableSub');
+const seatsEl = document.getElementById('seats');
+const playersList = document.getElementById('playersList');
+const communityEl = document.getElementById('community');
+const potEl = document.getElementById('pot');
+const yourChipsEl = document.getElementById('yourChips');
+const yourSeatEl = document.getElementById('yourSeat');
+const chatEl = document.getElementById('chat');
+const chatInput = document.getElementById('chatInput');
+const betInput = document.getElementById('betAmount');
+
+// Initialize
+renderLobby(); renderTablesList(); refreshProfile();
+
+// helpers for storage
+function readTables(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }catch(e){return []} }
+function writeTables(t){ localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); }
+
+function renderLobby(){ const html=[]; const tables=readTables(); lobbyList.innerHTML=''; tables.forEach(t=>{
+  const div=document.createElement('div'); div.className='table-card'; div.innerHTML=`<div><strong>${t.name}</strong><div class="small">${t.mode} • ${t.seats.filter(s=>s).length}/${seatsPerTable}</div></div><div><button data-id="${t.id}">Join</button></div>`;
+  lobbyList.appendChild(div);
+});
+  lobbyList.querySelectorAll('button').forEach(b=>b.addEventListener('click',e=>joinTable(e.target.dataset.id)));
+}
+
+// create table
+document.getElementById('createTbl').addEventListener('click',()=>{
+  const name=document.getElementById('newTblName').value.trim()||('Table '+(Date.now()%1000));
+  const tables=readTables(); const id='t_'+Math.random().toString(36).slice(2,8);
+  const seats=Array(seatsPerTable).fill(null);
+  const table={id,name,mode:'Texas Hold\'em',seats,pot:0,community:[],deck:[],stage:'idle'};
+  tables.push(table); writeTables(tables); renderLobby(); renderTablesList(); document.getElementById('newTblName').value='';
+});
+
+function renderTablesList(){ const tables=readTables(); tablesList.innerHTML=''; tables.forEach(t=>{ const d=document.createElement('div'); d.className='table-card'; d.innerHTML=`<div><strong>${t.name}</strong><div class="small">${t.seats.filter(s=>s).length}/${seatsPerTable} seats</div></div><div style="display:flex;flex-direction:column;gap:6px"><button data-id="${t.id}" class="joinBtn">Join</button><button data-id="${t.id}" class="spectateBtn">Spectate</button></div>`; tablesList.appendChild(d); }); tablesList.querySelectorAll('.joinBtn').forEach(b=>b.addEventListener('click',e=>joinTable(e.target.dataset.id))); tablesList.querySelectorAll('.spectateBtn').forEach(b=>b.addEventListener('click',e=>spectateTable(e.target.dataset.id)));
+}
+
+function refreshProfile(){ document.getElementById('playerName').innerText = displayName; yourChipsEl.innerText = myChips; }
+
+// join table: seat the player in first empty seat
+function joinTable(id){ const tables=readTables(); const t=tables.find(x=>x.id===id); if(!t) return alert('Table not found');
+  // find existing seat where this player already is
+  let seatIndex = t.seats.findIndex(s=>s && s.id===playerId);
+  if(seatIndex===-1){ seatIndex = t.seats.findIndex(s=>!s); if(seatIndex===-1){ return alert('Table full'); } t.seats[seatIndex] = {id:playerId,name:displayName,chips:myChips}; }
+  writeTables(tables); currentTableId=id; renderTable();
+}
+
+function spectateTable(id){ currentTableId=id; renderTable(); }
+
+// render selected table
+function renderTable(){ const tables=readTables(); const t = tables.find(x=>x.id===currentTableId); if(!t){ tableTitle.innerText='No table selected'; tableSub.innerText='Join or create a table'; seatsEl.innerHTML=''; playersList.innerHTML=''; communityEl.innerHTML=''; potEl.innerText='0'; yourSeatEl.innerText='—'; return }
+  tableTitle.innerText = t.name; tableSub.innerText = t.mode; potEl.innerText = t.pot;
+  // seats
+  seatsEl.innerHTML=''; playersList.innerHTML=''; communityEl.innerHTML='';
+  t.seats.forEach((s,i)=>{
+    const div=document.createElement('div'); div.className='seat';
+    // position seats around ellipse
+    const angle = (i / seatsPerTable) * Math.PI * 2 - Math.PI/2; const rx=300, ry=150; const x = 380 + Math.cos(angle)*rx - 60; const y = 210 + Math.sin(angle)*ry - 40;
+    div.style.left = x+'px'; div.style.top = y+'px';
+    if(s){ div.innerHTML = `<div><strong>${s.name}</strong></div><div class="chip-stack">${s.chips}</div><div class="small">Seat ${i+1}</div>`; }
+    else{ div.innerHTML = `<div class="small">Empty</div><div style="margin-top:6px"><button data-seat="${i}">Sit</button></div>`; }
+    seatsEl.appendChild(div);
+  });
+  // bind sit buttons
+  seatsEl.querySelectorAll('button').forEach(b=>b.addEventListener('click',e=>sitAt(currentTableId,Number(e.target.dataset.seat))));
+
+  // players list
+  t.seats.forEach((s,i)=>{ const p=document.createElement('div'); p.style.padding='6px 0'; p.innerHTML = s ? `<strong>${s.name}</strong> — ${s.chips} chips (Seat ${i+1})` : `<span class="small">Empty Seat ${i+1}</span>`; playersList.appendChild(p); if(s && s.id===playerId) yourSeatEl.innerText = i+1; });
+  // community
+  t.community.forEach(c=>{ const el=document.createElement('div'); el.className='card-ui'; el.textContent=c; communityEl.appendChild(el); });
+}
+
+function sitAt(tableId, seatIndex){ const tables=readTables(); const t=tables.find(x=>x.id===tableId); if(!t) return; if(t.seats[seatIndex]) return alert('Seat taken'); t.seats[seatIndex] = {id:playerId,name:displayName,chips:myChips}; writeTables(tables); renderTable(); }
+
+// Deal logic (simplified)
+function buildDeck(){ const ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K']; const suits=['♠','♥','♣','♦']; const d=[]; for(const r of ranks) for(const s of suits) d.push(r+s); return shuffle(d); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]} return a }
+
+document.getElementById('btnDeal').addEventListener('click',()=>{
+  if(!currentTableId) return alert('Join a table first');
+  const tables=readTables(); const t=tables.find(x=>x.id===currentTableId);
+  if(!t) return;
+  // create deck and deal two cards to seated players
+  const deck = buildDeck(); t.deck = deck; t.community = []; t.pot = 0; t.stage = 'pre';
+  t.seats = t.seats.map(s=> s ? ({...s,hand:[deck.pop(),deck.pop()]}) : null );
+  writeTables(tables); renderTable(); broadcastChat('Dealer: Dealt a new hand.');
+});
+
+// betting
+document.getElementById('btnBet').addEventListener('click',()=>{
+  const amt = Math.max(1,Math.floor(Number(betInput.value)||0)); if(!currentTableId) return alert('Join a table');
+  const tables = readTables(); const t = tables.find(x=>x.id===currentTableId); if(!t) return;
+  const seatIndex = t.seats.findIndex(s=>s && s.id===playerId); if(seatIndex===-1) return alert('You must sit to bet');
+  const seat = t.seats[seatIndex]; if(seat.chips < amt) return alert('Not enough chips');
+  seat.chips -= amt; t.pot += amt; // record bet
+  writeTables(tables); renderTable(); updateLocalChips(seat.chips); broadcastChat(`${seat.name} bets ${amt}`);
+});
+
+document.getElementById('btnCheck').addEventListener('click',()=>{ if(!currentTableId) return; broadcastChat(displayName+' checks'); });
+document.getElementById('btnFold').addEventListener('click',()=>{ if(!currentTableId) return; broadcastChat(displayName+' folds'); });
+
+// chat
+chatInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const v=chatInput.value.trim(); if(!v) return; broadcastChat(displayName+': '+v); chatInput.value=''; } });
+
+function broadcastChat(msg){ const time = new Date().toLocaleTimeString(); const entry = time+' — '+msg; // append to per-table chat stored in localStorage
+  const tables = readTables(); const t = tables.find(x=>x.id===currentTableId); if(!t) return; t.chat = t.chat || []; t.chat.push(entry); if(t.chat.length>200) t.chat.shift(); writeTables(tables); renderChat(t.chat); }
+
+function renderChat(chatArr){ chatEl.innerHTML=''; (chatArr||[]).forEach(c=>{ const d=document.createElement('div'); d.textContent = c; chatEl.appendChild(d); }); chatEl.scrollTop = chatEl.scrollHeight; }
+
+function updateLocalChips(newChips){ myChips = newChips; localStorage.setItem('poker_chips', String(myChips)); refreshProfile(); }
+
+// listen for storage changes to sync across tabs
+window.addEventListener('storage', (e)=>{
+  if(e.key===STORAGE_KEY){ renderLobby(); renderTablesList(); renderTable(); }
+});
+
+// convenience: auto-select first table if exists
+setTimeout(()=>{ const tables=readTables(); if(tables.length && !currentTableId){ currentTableId = tables[0].id; renderTable(); } },200);
+
+</script>
+</body>
+</html>
